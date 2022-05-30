@@ -1,6 +1,6 @@
 {
   "name": "access_key_blockchain_verification_module_server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "",
   "main": "mainController.js",
   "scripts": {
