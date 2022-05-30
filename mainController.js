@@ -8,6 +8,18 @@ app.use(bodyParser.urlencoded({ extended: true }));
 const { AccessKeyBlockchain } = require('./AccessKeyBlockchain');
 const blockchain = new AccessKeyBlockchain();
 
+
+app.get('/health-check', (_,res) => {
+  res.send({
+    status : 200,
+    message: 'Server is working normally',
+    data : {
+      version : require('./package.json').version
+    }
+  })
+})
+
+
 /*
  * 출입키 블록체인 네트워크 참여 요청 API
  */

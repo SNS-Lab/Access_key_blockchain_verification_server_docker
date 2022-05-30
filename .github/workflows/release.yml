@@ -1,0 +1,97 @@
+name: Publish Docker Image to AWS ECR
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  publish:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout to current repo
+        uses: actions/checkout@v2
+
+      - name: Use Node.js 16
+        uses: actions/setup-node@v2
+        with:
+          node-version: 16
+          cache: yarn
+
+      - name: Install package deps including dev
+        run: yarn install
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Login to AWS ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Set version tag
+        uses: actions/github-script@v4
+        id: set-version-tag
+        with:
+          script: |
+            core.setOutput('tag', context.ref.substring(10).replace('v', ''))
+
+      - name: Build, tag and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: smart-door-lock-gw-ac-server-repo
+          IMAGE_TAG: ${{ steps.set-version-tag.outputs.tag }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY --all-tags
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      # - name: Download Ecs TaskDef
+      #   run: |
+      #     aws ecs describe-task-definition --task-definition smart-door-lock-gw-ac-server-task-def \
+      #     --query taskDefinition > task-definition.json
+          
+      # - name: Modify TaskDefinition
+      #   run: yarn modify-task-def
+
+      # - name: Render TaskDef
+      #   id: render-task-def
+      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
+      #   with:
+      #     task-definition: task-definition.json
+      #     container-name: smart-door-lock-gw-ac-server-repo-container
+      #     image: ${{ steps.build-image.outputs.image }}
+
+      # - name: Deploy ECS TaskDef
+      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      #   with:
+      #     task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+      #     service: smart-door-lock-gw-ac-server-service
+      #     cluster: dev-hub-cluster
+      #     wait-for-service-stability: true
+
+  release:
+    name: Create GitHub Release
+
+    needs: publish
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout to current repository
+        uses: actions/checkout@v2
+
+      - name: Create new release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: New Version Release ${{ github.ref }}
+          draft: false
+          prerelease: false
